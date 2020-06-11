@@ -1,18 +1,55 @@
 #!/usr/bin/python3
 
 import requests
-import numpy as np
 import pandas as pd
-import altair as alt
 import streamlit as st
 import plotly_express as px
+from plotly import graph_objects as go
 
 from datetime import date
 
-st.header("Covid-19 Trend Visualizer in India")
+# Constants
+MAPPER1 = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06', 'July': '07'}
+MAPPER2 = {'an': "Andaman and Nicobar Islands", 'ap': "Andhra Pradesh", 'ar': "Arunachal Pradesh", 'as': "Assam", 'br': "Bihar", 'ch': "Chandigarh", 'ct': "Chhattisgarh", 'dd': "Dadra and Nagar Haveli and Daman and Diu", 'dl': "Delhi", 'dn': "Dadra and Nagar Haveli", 'ga': "Goa", 'gj': "Gujarat",
+       'hp': "Himachal Pradesh", 'hr': "Haryana", 'jh': "Jharkhand", 'jk': "Jammu and Kashmir", 'ka': "Karnataka", 'kl': "Kerala", 'la': "Ladakh", 'ld': "Lakshadweep", 'mh': "Maharashtra", 'ml': "Meghalaya", 'mn': "Manipur", 'mp': "Madhya Pradesh",
+       'mz': "Mizoram", 'nl': "Nagaland", 'or': "Odisha", 'pb': "Punjab", 'py': "Puducherry", 'rj': "Rajasthan", 'sk': "Sikkim", 'tg': "Telangana", 'tn': "Tamil Nadu", 'tr': "Tripura", 'tt': "tt", 'un': "un",
+       'up': "Uttar Pradesh", 'ut': "Uttarakhand", 'wb': "West Bengal", 'date': 'date', "status": "status"}
+
+# Get India's data
+def get_india_data():
+    URL = 'https://api.covid19india.org/data.json'
+
+    def convert(date): 
+        date_splits = date.split() 
+        converted = "-".join([date_splits[0], MAPPER1[date_splits[1]], '2020']) 
+        return converted
+
+    raw_data = requests.get(URL)
+    jsonobj = raw_data.json()
+    cases = jsonobj['cases_time_series']
+
+    india_data = pd.DataFrame(cases)
+    india_data['date'] = india_data['date'].apply(convert)
+
+    return india_data
+
+# Get State's data
+def get_states_data():
+    URL = 'https://api.covid19india.org/states_daily.json'
+
+    raw_data = requests.get(URL)
+    jsonobj = raw_data.json()
+    cases = jsonobj['states_daily']
+
+    states_data = pd.DataFrame(cases)
+    states_data.columns = states_data.columns.map(MAPPER2)
+
+    return states_data
 
 # Preprocessing India data
 def preprocess_india_data(data):
+    data.set_index(['date'], drop=True, inplace=True)
+    data = data[data.columns[data.columns != 'date'].tolist()].astype("int64")
     data.index = pd.to_datetime(data.index, format='%d-%m-%Y')
     data['totalactive'] = (data['totalconfirmed'] - (data['totaldeceased'] + data['totalrecovered']))
     data['dailyactive'] = (data['dailyconfirmed'] - (data['dailydeceased'] + data['dailyrecovered']))
@@ -27,11 +64,14 @@ def preprocess_india_data(data):
 
 # Preprocessing States data
 def preprocess_states_data(states_data):
+    states_data['date'] = pd.to_datetime(states_data['date'])
+    states_data.set_index(['date', 'status'], drop=True, inplace=True)
+    states_data = states_data.astype("int64")
     states_data.drop(['tt', 'un'], axis=1, inplace=True)
 
     return states_data
 
-# Get active states record
+# Get active states data
 def get_active_states(states_data):
     confirmed = states_data.loc[(slice(None), "Confirmed"), :].droplevel(level=1)
     recovered = states_data.loc[(slice(None), "Recovered"), :].droplevel(level=1)
@@ -43,46 +83,50 @@ def get_active_states(states_data):
 
 @st.cache(allow_output_mutation=True)
 def initialize_data():
-    data = pd.read_csv('india_data.csv', index_col=['date'])
-    states_data = pd.read_csv('states_data.csv', parse_dates=['date'], index_col=['date', 'status'])
-    # districts_data = requests.get("https://api.covid19india.org/districts_daily.json")
-    # districts_data = districts_data.json()['districtsDaily']
-    districts_data = 0
-    latlong = pd.read_csv('latlong.csv', index_col=['state'])
+    data = get_india_data()
+    states_data = get_states_data()
+    districts_data = requests.get("https://api.covid19india.org/districts_daily.json")
+    districts_data = districts_data.json()['districtsDaily']
 
     # Applying preprocessing steps
     data = preprocess_india_data(data)
     states_data = preprocess_states_data(states_data)
     active_states = get_active_states(states_data)
 
-    return data, states_data, active_states, districts_data, latlong
+    return data, states_data, active_states, districts_data
 
-data, states_data, active_states, districts_data, latlong = initialize_data()
+data, states_data, active_states, districts_data = initialize_data()
+
+######### Web Design #########
+st.header("Covid-19 Trend Visualizer in India")
 
 if st.sidebar.checkbox("Wanna see states data?", False):
-    header = "Since 14th March"
     states_option1 = st.sidebar.selectbox("State", states_data.columns)
     states_option2 = st.sidebar.selectbox("State Type", ['Confirmed', 'Deceased', 'Recovered', 'Active'])
 
     st.subheader(states_option2+" Cases in "+states_option1)
     if states_option2 == "Active":
-        st.line_chart(active_states.loc[:, states_option1].cumsum())
+        show_data = active_states.loc[:, states_option1].cumsum()
+        st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
     else:
-        st.line_chart(states_data.loc[(slice(None), states_option2), states_option1].droplevel(level=1).cumsum())
+        show_data = states_data.loc[(slice(None), states_option2), states_option1].droplevel(level=1).cumsum()
+        st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 
-    # if st.sidebar.checkbox("See at district level?", False):
-        # select_district1 = st.sidebar.selectbox("District", list(districts_data[states_option1].keys()))
-        # select_district2 = st.sidebar.selectbox("District Type", ['Confirmed', 'Deceased', 'Recovered', 'Active'])
-        # district_level = pd.DataFrame(districts_data[states_option1][select_district1]).set_index(['date'])
-        # district_level.drop(['notes'], axis=1, inplace=True)
-# 
-        # st.subheader(select_district2+" Cases in "+select_district1)
-        # st.line_chart(district_level[select_district2.lower()])
+    if st.sidebar.checkbox("See at district level?", False):
+        select_district1 = st.sidebar.selectbox("District", list(districts_data[states_option1].keys()))
+        select_district2 = st.sidebar.selectbox("District Type", ['Confirmed', 'Deceased', 'Recovered', 'Active'])
+        district_level = pd.DataFrame(districts_data[states_option1][select_district1]).set_index(['date'])
+        district_level.drop(['notes'], axis=1, inplace=True)
+
+        st.subheader(select_district2+" Cases in "+select_district1)
+        show_data = district_level[select_district2.lower()]
+        st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 else:
-    header = "Since 30th January"
+    header = "Data since 30-01-2020 to till date:"
     indias_option = st.selectbox("Select the measure:", data.columns, index=6)
     st.subheader(indias_option+" Cases in India.")
-    st.write(px.scatter(data[indias_option]))
+    show_data = data[indias_option]
+    st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 
     if st.checkbox("Show Raw Data", False):
         st.subheader(header)
@@ -91,15 +135,14 @@ else:
     date_month_year = [(d.day, d.month, d.year) for d in states_data.index.levels[0]]
     d, m, y = date_month_year[0]
 
-    st.subheader("Select date:")
-    slide_value = st.slider("", min_value = 0, max_value = len(date_month_year), value = date_month_year.index((d, m, y)), format = "")
+    slide_value = st.slider("Select date:", min_value = 0, max_value = len(date_month_year), value = date_month_year.index((d, m, y)), format = "")
     d, m, y = date_month_year[slide_value]
     d = date(y, m, d)
 
-    st.subheader(f"Active Cases across India as on: {d:%d}-{d:%m}-{d:%Y}")
+    st.subheader(f"Active Cases across India as on: {d:%d} {d:%B} {d:%Y}")
     st.write(px.bar(x=active_states.columns, y=active_states.cumsum().loc[d, :].values))
 
-    st.subheader(f"Top 10 Infected states on: {d:%d}-{d:%m}-{d:%Y}")
+    st.subheader(f"Top 10 Infected states on: {d:%d} {d:%B} {d:%Y}")
     top10 = states_data.loc[(d, slice(None)), :].droplevel(level=0).T.sort_values(by="Confirmed", ascending=False).iloc[:10, :]
 
     st.write(px.bar(top10, barmode='group'))
