@@ -4,9 +4,12 @@ import requests
 import pandas as pd
 import streamlit as st
 import plotly_express as px
+
+from datetime import date, timedelta
 from plotly import graph_objects as go
 
-from datetime import date
+# Custom modules
+from maps_utils import give_data, give_india_map
 
 # Constants
 MAPPER1 = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06', 'July': '07'}
@@ -27,11 +30,13 @@ def get_india_data():
     raw_data = requests.get(URL)
     jsonobj = raw_data.json()
     cases = jsonobj['cases_time_series']
+    tests = jsonobj['tested']
 
     india_data = pd.DataFrame(cases)
     india_data['date'] = india_data['date'].apply(convert)
+    tests = pd.DataFrame(tests)
 
-    return india_data
+    return india_data, tests
 
 # Get State's data
 def get_states_data():
@@ -62,6 +67,16 @@ def preprocess_india_data(data):
 
     return data
 
+# Preprocessing India's tests data
+def preprocess_india_tests_data(tests):
+    tests = tests[['updatetimestamp', 'totalsamplestested']]
+    idx = tests[(tests['totalsamplestested'] == "")].index
+    tests.drop(idx, axis=0, inplace=True)
+    tests['updatetimestamp'] = pd.to_datetime(tests['updatetimestamp'], format='%d/%m/%Y %H:%M:%S')
+    tests.set_index(['updatetimestamp'], drop=True, inplace=True)
+
+    return tests
+
 # Preprocessing States data
 def preprocess_states_data(states_data):
     states_data['date'] = pd.to_datetime(states_data['date'])
@@ -83,19 +98,20 @@ def get_active_states(states_data):
 
 @st.cache(allow_output_mutation=True)
 def initialize_data():
-    data = get_india_data()
+    data, tests = get_india_data()
     states_data = get_states_data()
     districts_data = requests.get("https://api.covid19india.org/districts_daily.json")
     districts_data = districts_data.json()['districtsDaily']
 
     # Applying preprocessing steps
     data = preprocess_india_data(data)
+    tests = preprocess_india_tests_data(tests)
     states_data = preprocess_states_data(states_data)
     active_states = get_active_states(states_data)
 
-    return data, states_data, active_states, districts_data
+    return data, tests, states_data, active_states, districts_data
 
-data, states_data, active_states, districts_data = initialize_data()
+data, tests, states_data, active_states, districts_data = initialize_data()
 
 ######### Web Design #########
 st.header("Covid-19 Trend Visualizer in India")
@@ -123,14 +139,24 @@ if st.sidebar.checkbox("Wanna see states data?", False):
         st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 else:
     header = "Data since 30-01-2020 to till date:"
-    indias_option = st.selectbox("Select the measure:", data.columns, index=6)
+    indias_option = st.selectbox("Select the measure:", data.columns.to_list()+['Total Tested'], index=6)
     st.subheader(indias_option+" Cases in India.")
-    show_data = data[indias_option]
+    if indias_option == "Total Tested":
+        show_data = tests
+    else:    
+        show_data = data[indias_option]
     st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 
     if st.checkbox("Show Raw Data", False):
         st.subheader(header)
-        st.write(data)
+        st.write(show_data)
+
+    st.subheader("Cases at a glance")
+    yesterday = date.today() - timedelta(days=1)
+    map_option = st.selectbox("Select an Option:", ['Confirmed', "Recovered", "Deceased"])
+    map_data = give_data(states_data, yesterday, map_option)
+    map_obj = give_india_map(map_data, map_option)
+    st.bokeh_chart(map_obj, use_container_width=True)
 
     date_month_year = [(d.day, d.month, d.year) for d in states_data.index.levels[0]]
     d, m, y = date_month_year[0]
