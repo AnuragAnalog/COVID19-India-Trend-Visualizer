@@ -72,7 +72,7 @@ def preprocess_india_tests_data(tests):
     tests = tests[['updatetimestamp', 'totalsamplestested']]
     idx = tests[(tests['totalsamplestested'] == "")].index
     tests.drop(idx, axis=0, inplace=True)
-    tests['updatetimestamp'] = pd.to_datetime(tests['updatetimestamp'], format='%d/%m/%Y %H:%M:%S')
+    tests['updatetimestamp'] = pd.to_datetime(tests['updatetimestamp'])
     tests.set_index(['updatetimestamp'], drop=True, inplace=True)
 
     return tests
@@ -139,7 +139,7 @@ if st.sidebar.checkbox("Wanna see states data?", False):
         st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 else:
     header = "Data since 30-01-2020 to till date:"
-    indias_option = st.selectbox("Select the measure:", data.columns.to_list()+['Total Tested'], index=6)
+    indias_option = st.selectbox("Select the measure:", data.columns, index=6)
     st.subheader(indias_option+" Cases in India.")
     if indias_option == "Total Tested":
         show_data = tests
@@ -172,3 +172,8 @@ else:
     top10 = states_data.loc[(d, slice(None)), :].droplevel(level=0).T.sort_values(by="Confirmed", ascending=False).iloc[:10, :]
 
     st.write(px.bar(top10, barmode='group'))
+
+    # st.subheader("Compare different state's Active data:")
+    # multi_state = st.multiselect("Select States", active_states.columns.to_list(), default=['Maharashtra', 'Telangana', 'Andhra Pradesh', 'Kerala'])
+    # show_data = active_states.loc[:, multi_state].cumsum()
+    # st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
