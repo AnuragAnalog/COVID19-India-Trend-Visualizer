@@ -1,5 +1,7 @@
 # Covid19 Indian DashBoard
 
+Application's link: [https://covid19-india-dashboard.herokuapp.com/](https://covid19-india-dashboard.herokuapp.com/)
+
 This is a covid19 Indian Dashboard which was written in streamlit.
 
 Currently it's features are:
