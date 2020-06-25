@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from plotly import graph_objects as go
 
 # Custom modules
-from maps_utils import give_data, give_map_object
+from map_utils import give_data, give_map_object
 
 # Constants
 GEO_PATH_STATES = './geodata/states/'
