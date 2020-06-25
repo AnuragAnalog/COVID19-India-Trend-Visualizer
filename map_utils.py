@@ -6,13 +6,12 @@ import pandas as pd
 import streamlit as st
 import geopandas as gpd
 
-from bokeh.io import show
 from bokeh.plotting import figure
 from bokeh.palettes import brewer
 from bokeh.models import GeoJSONDataSource, LinearColorMapper, HoverTool, ColorBar
 
 # Constants
-HUE_MAPPER = {'Confirmed': 'Reds', 'Recovered': 'Greens', 'Deceased': 'Greys'}
+HUE_MAPPER = {'Confirmed': 'Reds', 'Recovered': 'Greens', 'Deceased': 'Greys', 'Active': 'Blues'}
 
 # Loading states data
 def give_data(states_data, date, status):
@@ -25,23 +24,30 @@ def give_data(states_data, date, status):
 
     return merged
 
-def give_india_map(merged_data, status):
+def give_map_object(merged_data, status, customization):
     # Conversion the entire data into string
     merged_json = json.loads(merged_data.to_json())
     json_data = json.dumps(merged_json)
     geosource = GeoJSONDataSource(geojson = json_data)
 
+    # Adding tools
+    tools = customization['tools']
+    if customization['status'] == "C":
+        tools.append((status, '@'+status))
+    else:
+        tools.append((status.capitalize(), '@'+status))
+
     # Define a multi-hue color scheme.
-    scheme = HUE_MAPPER[status]
+    scheme = HUE_MAPPER[status.capitalize()]
     palette = brewer[scheme][9]
     palette = palette[::-1]
 
     #Instantiate LinearColorMapper that linearly maps numbers in a range, into a sequence of colors. Input nan_color.
     color_mapper = LinearColorMapper(palette = palette, low = merged_data[status].min(), high = merged_data[status].max(), nan_color = '#d9d9d9')
-    hover = HoverTool(tooltips = [('States','@st_nm'),(status,'@'+status)])
+    hover = HoverTool(tooltips = tools)
     
     # Create color bar. 
-    color_bar = ColorBar(color_mapper=color_mapper, label_standoff=8,width = 500, height = 20, border_line_color=None,location = (0,0), orientation = 'horizontal')
+    color_bar = ColorBar(color_mapper=color_mapper, label_standoff=8, width = 20, height = 600, border_line_color=None,location = (0,0), orientation = 'vertical')
     
     # Create figure object.
     map_obj = figure(title = status+' cases in India', plot_height = 800 , plot_width = 750, tools = [hover])
@@ -53,12 +59,13 @@ def give_india_map(merged_data, status):
     map_obj.ygrid.grid_line_color = None
 
     map_obj.patches('xs','ys', source = geosource, fill_color = {'field' :status, 'transform' : color_mapper}, line_color = 'black', line_width = 0.25, fill_alpha = 1)
-    map_obj.add_layout(color_bar, 'below')
+    map_obj.add_layout(color_bar, 'right')
 
     return map_obj
 
 if __name__ == "__main__":
     states = pd.read_csv("states_data.csv", parse_dates=['date'], index_col=['date', 'status'])
     merged = give_data(states, "2020-06-14", "Confirmed")
-    map_obj = give_india_map(merged, "Confirmed")
+    customization = {'title': ' cases in India', 'tools': [('States', '@st_nm')], 'status': "C"}
+    map_obj = give_map_object(merged, "Confirmed", customization)
     st.bokeh_chart(map_obj, use_container_width=True)

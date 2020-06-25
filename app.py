@@ -1,22 +1,30 @@
 #!/usr/bin/python3
 
+import os
 import requests
 import pandas as pd
 import streamlit as st
+import geopandas as gpd
 import plotly_express as px
 
 from datetime import date, timedelta
 from plotly import graph_objects as go
 
 # Custom modules
-from maps_utils import give_data, give_india_map
+from maps_utils import give_data, give_map_object
 
 # Constants
+GEO_PATH_STATES = './geodata/states/'
+GEO_PATH_INDIA = './geodata/'
 MAPPER1 = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06', 'July': '07'}
 MAPPER2 = {'an': "Andaman and Nicobar Islands", 'ap': "Andhra Pradesh", 'ar': "Arunachal Pradesh", 'as': "Assam", 'br': "Bihar", 'ch': "Chandigarh", 'ct': "Chhattisgarh", 'dd': "Dadra and Nagar Haveli and Daman and Diu", 'dl': "Delhi", 'dn': "Dadra and Nagar Haveli", 'ga': "Goa", 'gj': "Gujarat",
        'hp': "Himachal Pradesh", 'hr': "Haryana", 'jh': "Jharkhand", 'jk': "Jammu and Kashmir", 'ka': "Karnataka", 'kl': "Kerala", 'la': "Ladakh", 'ld': "Lakshadweep", 'mh': "Maharashtra", 'ml': "Meghalaya", 'mn': "Manipur", 'mp': "Madhya Pradesh",
        'mz': "Mizoram", 'nl': "Nagaland", 'or': "Odisha", 'pb': "Punjab", 'py': "Puducherry", 'rj': "Rajasthan", 'sk': "Sikkim", 'tg': "Telangana", 'tn': "Tamil Nadu", 'tr': "Tripura", 'tt': "tt", 'un': "un",
        'up': "Uttar Pradesh", 'ut': "Uttarakhand", 'wb': "West Bengal", 'date': 'date', "status": "status"}
+MAPPER3 = {'Andaman and Nicobar Islands': 'andamannicobarislands', 'Andhra Pradesh': 'andhrapradesh', 'Arunachal Pradesh': 'arunachalpradesh', 'Assam': 'assam', 'Bihar': 'bihar', 'Chandigarh': 'chandigarh', 'Chhattisgarh': 'chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu': 'dnh-and-dd', 
+        'Delhi': 'delhi', 'Goa': 'goa', 'Gujarat': 'gujarat', 'Himachal Pradesh': 'himachalpradesh', 'Haryana': 'haryana', 'Jharkhand': 'jharkhand', 'Jammu and Kashmir': 'jammukashmir', 'Karnataka': 'karnataka', 'Kerala': 'kerala', 'Ladakh': 'ladakh', 'Lakshadweep': 'lakshadweep', 'Maharashtra': 'maharashtra', 
+        'Meghalaya': 'meghalaya', 'Manipur': 'manipur', 'Madhya Pradesh': 'madhyapradesh', 'Mizoram': 'mizoram', 'Nagaland': 'nagaland', 'Odisha': 'odisha', 'Punjab': 'punjab', 'Puducherry': 'puducherry', 'Rajasthan': 'rajasthan', 'Sikkim': 'sikkim', 'Telangana': 'telangana', 'Tamil Nadu': 'tamilnadu', 
+        'Tripura': 'tripura', 'Uttar Pradesh': 'uttarpradesh', 'Uttarakhand': 'uttarakhand', 'West Bengal': 'westbengal'}
 
 # Get India's data
 def get_india_data():
@@ -96,6 +104,46 @@ def get_active_states(states_data):
 
     return active
 
+# Get States Geo-data
+def get_states_geo_data():
+    states_geo = dict()
+
+    for file_name in os.listdir(GEO_PATH_STATES):
+        key = file_name.split('.')[0]
+        states_geo[key] = gpd.read_file(GEO_PATH_STATES+file_name)
+
+    return states_geo
+
+# Get States current status
+def get_states_current_status(districts_data):
+    states_current_status = dict()
+
+    for state in districts_data.keys():
+        tmp1 = list()
+        for district in districts_data[state]:
+            tmp2 = districts_data[state][district][-1].copy()
+            tmp2.update({'district': district})
+            tmp1.append(tmp2)
+        states_current_status[state] = pd.DataFrame(tmp1)
+
+    return states_current_status
+
+# Merging states current status and their Geo data
+def merge_geo_and_states_data(districts_data):
+    states_geo = get_states_geo_data()
+    states_current_status = get_states_current_status(districts_data)
+
+    merged_states = dict()
+    for state in MAPPER3.keys():
+        left_df = states_geo[MAPPER3[state]]
+        right_df = states_current_status[state]
+
+        tmp = pd.merge(left_df, right_df, left_on='district', right_on='district')
+        tmp.drop(['notes', 'date', 'dt_code', 'st_code', 'year', 'st_nm'], axis=1, inplace=True)
+        merged_states[state] = tmp
+
+    return merged_states
+
 @st.cache(allow_output_mutation=True)
 def initialize_data():
     data, tests = get_india_data()
@@ -108,10 +156,11 @@ def initialize_data():
     tests = preprocess_india_tests_data(tests)
     states_data = preprocess_states_data(states_data)
     active_states = get_active_states(states_data)
+    merged_states = merge_geo_and_states_data(districts_data)
 
-    return data, tests, states_data, active_states, districts_data
+    return data, tests, states_data, active_states, districts_data, merged_states
 
-data, tests, states_data, active_states, districts_data = initialize_data()
+data, tests, states_data, active_states, districts_data, merged_states = initialize_data()
 
 ######### Web Design #########
 st.header("Covid-19 Trend Visualizer in India")
@@ -127,6 +176,13 @@ if st.sidebar.checkbox("Wanna see states data?", False):
     else:
         show_data = states_data.loc[(slice(None), states_option2), states_option1].droplevel(level=1).cumsum()
         st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
+
+    st.subheader("Cases at a glance")
+    yesterday = date.today() - timedelta(days=1)
+    map_option = st.selectbox("Select an Option:", ["Confirmed", "Recovered", "Deceased", "Active"])
+    customization = {'title': ' cases in India', 'tools': [('District', '@district')], 'status': "L"}
+    map_obj = give_map_object(merged_states[states_option1], map_option.lower(), customization)
+    st.bokeh_chart(map_obj, use_container_width=True)
 
     if st.sidebar.checkbox("See at district level?", False):
         select_district1 = st.sidebar.selectbox("District", list(districts_data[states_option1].keys()))
@@ -155,7 +211,8 @@ else:
     yesterday = date.today() - timedelta(days=1)
     map_option = st.selectbox("Select an Option:", ['Confirmed', "Recovered", "Deceased"])
     map_data = give_data(states_data, yesterday, map_option)
-    map_obj = give_india_map(map_data, map_option)
+    customization = {'title': ' cases in India', 'tools': [('State', '@st_nm')], 'status': "C"}
+    map_obj = give_map_object(map_data, map_option, customization)
     st.bokeh_chart(map_obj, use_container_width=True)
 
     date_month_year = [(d.day, d.month, d.year) for d in states_data.index.levels[0]]
