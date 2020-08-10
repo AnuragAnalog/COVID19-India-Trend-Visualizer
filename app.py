@@ -16,7 +16,7 @@ from map_utils import give_data, give_map_object
 # Constants
 GEO_PATH_STATES = './geodata/states/'
 GEO_PATH_INDIA = './geodata/'
-MAPPER1 = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06', 'July': '07'}
+MAPPER1 = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06', 'July': '07', 'August': '08'}
 MAPPER2 = {'an': "Andaman and Nicobar Islands", 'ap': "Andhra Pradesh", 'ar': "Arunachal Pradesh", 'as': "Assam", 'br': "Bihar", 'ch': "Chandigarh", 'ct': "Chhattisgarh", 'dd': "Dadra and Nagar Haveli and Daman and Diu", 'dl': "Delhi", 'dn': "Dadra and Nagar Haveli", 'ga': "Goa", 'gj': "Gujarat",
        'hp': "Himachal Pradesh", 'hr': "Haryana", 'jh': "Jharkhand", 'jk': "Jammu and Kashmir", 'ka': "Karnataka", 'kl': "Kerala", 'la': "Ladakh", 'ld': "Lakshadweep", 'mh': "Maharashtra", 'ml': "Meghalaya", 'mn': "Manipur", 'mp': "Madhya Pradesh",
        'mz': "Mizoram", 'nl': "Nagaland", 'or': "Odisha", 'pb': "Punjab", 'py': "Puducherry", 'rj': "Rajasthan", 'sk': "Sikkim", 'tg': "Telangana", 'tn': "Tamil Nadu", 'tr': "Tripura", 'tt': "tt", 'un': "un",
@@ -120,8 +120,8 @@ def get_states_current_status(districts_data):
 
     for state in districts_data.keys():
         tmp1 = list()
-        for district in districts_data[state]:
-            tmp2 = districts_data[state][district][-1].copy()
+        for district in districts_data[state]['districtData']:
+            tmp2 = districts_data[state]['districtData'][district].copy()
             tmp2.update({'district': district})
             tmp1.append(tmp2)
         states_current_status[state] = pd.DataFrame(tmp1)
@@ -139,7 +139,7 @@ def merge_geo_and_states_data(districts_data):
         right_df = states_current_status[state]
 
         tmp = pd.merge(left_df, right_df, left_on='district', right_on='district')
-        tmp.drop(['notes', 'date', 'dt_code', 'st_code', 'year', 'st_nm'], axis=1, inplace=True)
+        tmp.drop(['notes', 'dt_code', 'st_code', 'year', 'st_nm'], axis=1, inplace=True)
         merged_states[state] = tmp
 
     return merged_states
@@ -148,8 +148,8 @@ def merge_geo_and_states_data(districts_data):
 def initialize_data():
     data, tests = get_india_data()
     states_data = get_states_data()
-    districts_data = requests.get("https://api.covid19india.org/districts_daily.json")
-    districts_data = districts_data.json()['districtsDaily']
+    districts_data = requests.get("https://api.covid19india.org/state_district_wise.json")
+    districts_data = districts_data.json()
 
     # Applying preprocessing steps
     data = preprocess_india_data(data)
@@ -170,6 +170,10 @@ if st.sidebar.checkbox("Wanna see states data?", False):
     states_option2 = st.sidebar.selectbox("State Type", ['Confirmed', 'Deceased', 'Recovered', 'Active'])
 
     st.subheader(states_option2+" Cases in "+states_option1)
+    st.error("Number of Confimred cases: "+str(states_data.loc[(slice(None), 'Confirmed'), states_option1].droplevel(level=1).cumsum().values[-1]))
+    st.success("Number of Recovered cases: "+str(states_data.loc[(slice(None), 'Recovered'), states_option1].droplevel(level=1).cumsum().values[-1]))
+    st.warning("Number of Deceased cases: "+str(states_data.loc[(slice(None), 'Deceased'), states_option1].droplevel(level=1).cumsum().values[-1]))
+    st.info("Number of Active cases: "+str(active_states.loc[:, states_option1].cumsum().values[-1]))
     if states_option2 == "Active":
         show_data = active_states.loc[:, states_option1].cumsum()
         st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
@@ -179,20 +183,9 @@ if st.sidebar.checkbox("Wanna see states data?", False):
 
     st.subheader("Cases at a glance")
     yesterday = date.today() - timedelta(days=1)
-    map_option = st.selectbox("Select an Option:", ["Confirmed", "Recovered", "Deceased", "Active"])
     customization = {'title': ' cases in India', 'tools': [('District', '@district')], 'status': "L"}
-    map_obj = give_map_object(merged_states[states_option1], map_option.lower(), customization)
+    map_obj = give_map_object(merged_states[states_option1], states_option2.lower(), customization)
     st.bokeh_chart(map_obj, use_container_width=True)
-
-    if st.sidebar.checkbox("See at district level?", False):
-        select_district1 = st.sidebar.selectbox("District", list(districts_data[states_option1].keys()))
-        select_district2 = st.sidebar.selectbox("District Type", ['Confirmed', 'Deceased', 'Recovered', 'Active'])
-        district_level = pd.DataFrame(districts_data[states_option1][select_district1]).set_index(['date'])
-        district_level.drop(['notes'], axis=1, inplace=True)
-
-        st.subheader(select_district2+" Cases in "+select_district1)
-        show_data = district_level[select_district2.lower()]
-        st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
 else:
     header = "Data since 30-01-2020 to till date:"
     indias_option = st.selectbox("Select the measure:", data.columns, index=6)
@@ -230,7 +223,7 @@ else:
 
     st.write(px.bar(top10, barmode='group'))
 
-    # st.subheader("Compare different state's Active data:")
-    # multi_state = st.multiselect("Select States", active_states.columns.to_list(), default=['Maharashtra', 'Telangana', 'Andhra Pradesh', 'Kerala'])
-    # show_data = active_states.loc[:, multi_state].cumsum()
-    # st.write(go.Figure(data=go.Scatter(x=show_data.index, y=show_data.values, mode='lines+markers')))
+    st.subheader("Compare different state's Active data:")
+    multi_state = st.multiselect("Select States", active_states.columns.to_list(), default=['Maharashtra', 'Telangana', 'Andhra Pradesh', 'Kerala'])
+    show_data = active_states.loc[:, multi_state].cumsum().reset_index().melt(id_vars='date')
+    st.plotly_chart(px.scatter(show_data, x='date', y='value', color='variable'))
