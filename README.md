@@ -5,9 +5,14 @@ Application's link: [https://covid19-india-dashboard.herokuapp.com/](https://cov
 This is a covid19 Indian Dashboard which was written in streamlit.
 
 Currently it's features are:
-* Trend of Total cases in India(Confirmed, Active, Recovered, Deceased)
+* Trend of Total/Daily cases in India(Confirmed, Active, Recovered, Deceased)
 * A Histogram of active cases across india on a particular date
 * Top 10 states based on confirmed cases on a particular date
+* Comparing between different states Active cases
+
+## Demo
+
+![demo](./demo.gif)
 
 ## Problems which I have faced
 
