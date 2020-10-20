@@ -13,6 +13,9 @@ from plotly import graph_objects as go
 # Custom modules
 from map_utils import give_data, give_map_object
 
+# Setting page configuration
+st.beta_set_page_config(page_title="Covid19 India Dashboard")
+
 # Constants
 GEO_PATH_STATES = './geodata/states/'
 GEO_PATH_INDIA = './geodata/'
@@ -163,7 +166,7 @@ def initialize_data():
 data, tests, states_data, active_states, districts_data, merged_states = initialize_data()
 
 ######### Web Design #########
-st.header("Covid-19 Trend Visualizer in India")
+st.title("Covid-19 Trend Visualizer in India")
 
 if st.sidebar.checkbox("Wanna see states data?", False):
     states_option1 = st.sidebar.selectbox("State", states_data.columns)
