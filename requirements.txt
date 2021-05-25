@@ -3,6 +3,5 @@ numpy>=1.16.4
 plotly>=4.8.1
 pandas>=0.25.1
 geopandas>=0.7.0
-requests>=2.22.0
-streamlit>=0.57.3
+streamlit>=0.80.0
 plotly_express>=0.4.1
