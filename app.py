@@ -1,15 +1,11 @@
 #!/usr/bin/python3
 
+import numpy as np
 import pandas as pd
 import streamlit as st
-import geopandas as gpd
-import plotly_express as px
 
 from datetime import date, timedelta
 from plotly import graph_objects as go
-
-# Custom modules
-from map_utils import give_data, give_map_object
 
 # Setting page configuration
 st.set_page_config(page_title="Covid19 India Dashboard")
@@ -36,6 +32,7 @@ def preprocess_india_data(india_ts):
     return india_ts
 
 def preprocess_states_data(states_ts):
+    states_ts.replace(np.nan, 0)
     states_ts['Active'] = states_ts['Confirmed'] - states_ts['Recovered'] - states_ts['Deceased']
 
     return states_ts
@@ -60,10 +57,12 @@ see_states = st.checkbox("Wanna see states data?")
 
 if see_states:
     state_opt = st.selectbox('Pick a state', options=states['State'].unique()[states['State'].unique() != 'India'].tolist())
-    type_opts = ['Confirmed', 'Active', 'Recovered', 'Deceased']
+    type_opts = ['Confirmed', 'Active', 'Recovered', 'Deceased', 'Tested']
     tc = st.selectbox(label="Type of cases", options=type_opts)
 
     state_info = (states['State'] == state_opt)
+    st.header(state_opt)
+    st.subheader(tc+' Count')
     st.plotly_chart(go.Figure(go.Scatter(x=states[state_info]['Date'], y=states[state_info][tc])))
 else:
     type_opts = ['Daily Confirmed', 'Total Confirmed', 'Daily Recovered', 'Total Recovered', 'Daily Deceased', 'Total Deceased', 'Daily Active', 'Total Active']

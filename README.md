@@ -7,8 +7,8 @@ This is a covid19 Indian Dashboard which was written in streamlit.
 Currently it's features are:
 * Trend of Total/Daily cases in India(Confirmed, Active, Recovered, Deceased)
 * A Histogram of active cases across india on a particular date
-* Top 10 states based on confirmed cases on a particular date
-* Comparing between different states Active cases
+
+> Due to the change in API I have updated the app, the below demo is not the current one.
 
 ## Demo
 
